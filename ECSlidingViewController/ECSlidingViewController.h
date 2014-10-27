@@ -101,17 +101,17 @@
  */
 
 @interface ECSlidingViewController : UIViewController <UIViewControllerContextTransitioning,
-                                                       UIViewControllerTransitionCoordinator,
-                                                       UIViewControllerTransitionCoordinatorContext> {
-    @private
+UIViewControllerTransitionCoordinator,
+UIViewControllerTransitionCoordinatorContext> {
+@private
     CGFloat _anchorLeftPeekAmount;
     CGFloat _anchorLeftRevealAmount;
     CGFloat _anchorRightPeekAmount;
     CGFloat _anchorRightRevealAmount;
     UIPanGestureRecognizer *_panGesture;
     UITapGestureRecognizer *_resetTapGesture;
-                                                           
-    @protected
+    
+@protected
     UIViewController *_topViewController;
     UIViewController *_underLeftViewController;
     UIViewController *_underRightViewController;
@@ -302,5 +302,10 @@
  The default duration of the view transition.
  */
 @property (nonatomic, assign) NSTimeInterval defaultTransitionDuration;
+
+/**
+ Activate or deactivate the gesture recognizer to open/close the controller
+ */
+@property (nonatomic, assign) BOOL panGestureDisabled;
 
 @end

@@ -27,7 +27,8 @@
 #import "ECSlidingInteractiveTransition.h"
 #import "ECSlidingSegue.h"
 
-@interface ECSlidingViewController()
+@interface ECSlidingViewController() <UIGestureRecognizerDelegate>
+
 @property (nonatomic, assign) ECSlidingViewControllerOperation currentOperation;
 @property (nonatomic, strong) ECSlidingAnimationController *defaultAnimationController;
 @property (nonatomic, strong) ECSlidingInteractiveTransition *defaultInteractiveTransition;
@@ -46,9 +47,9 @@
 @property (nonatomic, copy) void (^coordinatorAnimations)(id<UIViewControllerTransitionCoordinatorContext>context);
 @property (nonatomic, copy) void (^coordinatorCompletion)(id<UIViewControllerTransitionCoordinatorContext>context);
 @property (nonatomic, copy) void (^coordinatorInteractionEnded)(id<UIViewControllerTransitionCoordinatorContext>context);
+
 - (void)setup;
 
-- (void)moveTopViewToPosition:(ECSlidingViewControllerTopViewPosition)position animated:(BOOL)animated onComplete:(void(^)())complete;
 - (CGRect)topViewCalculatedFrameForPosition:(ECSlidingViewControllerTopViewPosition)position;
 - (CGRect)underLeftViewCalculatedFrameForTopViewPosition:(ECSlidingViewControllerTopViewPosition)position;
 - (CGRect)underRightViewCalculatedFrameForTopViewPosition:(ECSlidingViewControllerTopViewPosition)position;
@@ -63,6 +64,7 @@
 - (UIViewController *)viewControllerWillAppearForSuccessfulOperation:(ECSlidingViewControllerOperation)operation;
 - (UIViewController *)viewControllerWillDisappearForSuccessfulOperation:(ECSlidingViewControllerOperation)operation;
 - (void)updateTopViewGestures;
+
 @end
 
 @implementation ECSlidingViewController
@@ -201,13 +203,9 @@
 }
 
 - (UIStoryboardSegue *)segueForUnwindingToViewController:(UIViewController *)toViewController fromViewController:(UIViewController *)fromViewController identifier:(NSString *)identifier {
-    if ([self.underLeftViewController isMemberOfClass:[toViewController class]] || [self.underRightViewController isMemberOfClass:[toViewController class]]) {
-        ECSlidingSegue *unwindSegue = [[ECSlidingSegue alloc] initWithIdentifier:identifier source:fromViewController destination:toViewController];
-        [unwindSegue setValue:@YES forKey:@"isUnwinding"];
-        return unwindSegue;
-    } else {
-        return [super segueForUnwindingToViewController:toViewController fromViewController:fromViewController identifier:identifier];
-    }
+    ECSlidingSegue *unwindSegue = [[ECSlidingSegue alloc] initWithIdentifier:identifier source:fromViewController destination:toViewController];
+    [unwindSegue setValue:@YES forKey:@"isUnwinding"];
+    return unwindSegue;
 }
 
 - (UIViewController *)childViewControllerForStatusBarHidden {
@@ -321,10 +319,6 @@
     self.preserveRightPeekAmount = NO;
 }
 
-- (void)setDefaultTransitionDuration:(NSTimeInterval)defaultTransitionDuration {
-    self.defaultAnimationController.defaultTransitionDuration = defaultTransitionDuration;
-}
-
 - (CGFloat)anchorLeftPeekAmount {
     if (_anchorLeftPeekAmount == CGFLOAT_MAX && _anchorLeftRevealAmount != CGFLOAT_MAX) {
         return CGRectGetWidth(self.view.bounds) - _anchorLeftRevealAmount;
@@ -402,7 +396,7 @@
     if (_resetTapGesture) return _resetTapGesture;
     
     _resetTapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(resetTopViewAnimated:)];
-    
+    _resetTapGesture.delegate = self;
     return _resetTapGesture;
 }
 
@@ -410,7 +404,7 @@
     if (_panGesture) return _panGesture;
     
     _panGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(detectPanGestureRecognizer:)];
-    
+    _panGesture.delegate = self;
     return _panGesture;
 }
 
@@ -429,26 +423,27 @@
 }
 
 - (void)anchorTopViewToRightAnimated:(BOOL)animated onComplete:(void (^)())complete {
-    [self moveTopViewToPosition:ECSlidingViewControllerTopViewPositionAnchoredRight animated:animated onComplete:complete];
+    self.isAnimated = animated;
+    self.animationComplete = complete;
+    ECSlidingViewControllerOperation operation = [self operationFromPosition:self.currentTopViewPosition toPosition:ECSlidingViewControllerTopViewPositionAnchoredRight];
+    [self animateOperation:operation];
 }
 
 - (void)anchorTopViewToLeftAnimated:(BOOL)animated onComplete:(void (^)())complete {
-    [self moveTopViewToPosition:ECSlidingViewControllerTopViewPositionAnchoredLeft animated:animated onComplete:complete];
+    self.isAnimated = animated;
+    self.animationComplete = complete;
+    ECSlidingViewControllerOperation operation = [self operationFromPosition:self.currentTopViewPosition toPosition:ECSlidingViewControllerTopViewPositionAnchoredLeft];
+    [self animateOperation:operation];
 }
 
 - (void)resetTopViewAnimated:(BOOL)animated onComplete:(void(^)())complete {
-    [self moveTopViewToPosition:ECSlidingViewControllerTopViewPositionCentered animated:animated onComplete:complete];
+    self.isAnimated = animated;
+    self.animationComplete = complete;
+    ECSlidingViewControllerOperation operation = [self operationFromPosition:self.currentTopViewPosition toPosition:ECSlidingViewControllerTopViewPositionCentered];
+    [self animateOperation:operation];
 }
 
 #pragma mark - Private
-
-- (void)moveTopViewToPosition:(ECSlidingViewControllerTopViewPosition)position animated:(BOOL)animated onComplete:(void(^)())complete {
-    self.isAnimated = animated;
-    self.animationComplete = complete;
-    [self.view endEditing:YES];
-    ECSlidingViewControllerOperation operation = [self operationFromPosition:self.currentTopViewPosition toPosition:position];
-    [self animateOperation:operation];
-}
 
 - (CGRect)topViewCalculatedFrameForPosition:(ECSlidingViewControllerTopViewPosition)position {
     CGRect frameFromDelegate = [self frameFromDelegateForViewController:self.topViewController
@@ -576,7 +571,7 @@
         return;
     }
     if (self.transitionInProgress) return;
-
+    
     self.view.userInteractionEnabled = NO;
     
     self.transitionInProgress = YES;
@@ -687,15 +682,15 @@
 
 - (void)updateTopViewGestures {
     BOOL topViewIsAnchored = self.currentTopViewPosition == ECSlidingViewControllerTopViewPositionAnchoredLeft ||
-                             self.currentTopViewPosition == ECSlidingViewControllerTopViewPositionAnchoredRight;
+    self.currentTopViewPosition == ECSlidingViewControllerTopViewPositionAnchoredRight;
     UIView *topView = self.topViewController.view;
-
+    
     if (topViewIsAnchored) {
         if (self.topViewAnchoredGesture & ECSlidingViewControllerAnchoredGestureDisabled) {
             topView.userInteractionEnabled = NO;
         } else {
             self.gestureView.frame = topView.frame;
-
+            
             if (self.topViewAnchoredGesture & ECSlidingViewControllerAnchoredGesturePanning &&
                 ![self.customAnchoredGesturesViewMap objectForKey:self.panGesture]) {
                 [self.customAnchoredGesturesViewMap setObject:self.panGesture.view forKey:self.panGesture];
@@ -703,7 +698,7 @@
                 [self.gestureView addGestureRecognizer:self.panGesture];
                 if (!self.gestureView.superview) [self.view insertSubview:self.gestureView aboveSubview:topView];
             }
-
+            
             if (self.topViewAnchoredGesture & ECSlidingViewControllerAnchoredGestureTapping &&
                 ![self.customAnchoredGesturesViewMap objectForKey:self.resetTapGesture]) {
                 [self.gestureView addGestureRecognizer:self.resetTapGesture];
@@ -742,13 +737,26 @@
 
 #pragma mark - UIPanGestureRecognizer action
 
-- (void)detectPanGestureRecognizer:(UIPanGestureRecognizer *)recognizer {
-    if (recognizer.state == UIGestureRecognizerStateBegan) {
-        [self.view endEditing:YES];
+- (void)detectPanGestureRecognizer:(UIPanGestureRecognizer *)gestureRecognizer {
+    if (self.panGestureDisabled) {
+        return;
+    }
+    
+    if (gestureRecognizer.state == UIGestureRecognizerStateBegan) {
         _isInteractive = YES;
     }
-    [self.defaultInteractiveTransition updateTopViewHorizontalCenterWithRecognizer:recognizer];
+    
+    [self.defaultInteractiveTransition updateTopViewHorizontalCenterWithRecognizer:gestureRecognizer];
     _isInteractive = NO;
+}
+
+#pragma mark - UIGestureRecognizerDelegate
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    if (gestureRecognizer == self.panGesture && [otherGestureRecognizer isKindOfClass:[UIPanGestureRecognizer class]] && self.panGestureDisabled) {
+        return YES;
+    }
+    return NO;
 }
 
 #pragma mark - UIViewControllerTransitionCoordinatorContext
