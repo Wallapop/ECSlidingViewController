@@ -759,6 +759,25 @@
     return NO;
 }
 
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch;
+{
+    //Based on http://stackoverflow.com/a/13275350/1152289
+    
+    if([touch.view isKindOfClass:[UITableViewCell class]]) {
+        return NO;
+    }
+    // UITableViewCellContentView => UITableViewCell
+    if([touch.view.superview isKindOfClass:[UITableViewCell class]]) {
+        return NO;
+    }
+    // UITableViewCellContentView => UITableViewCellScrollView => UITableViewCell
+    if([touch.view.superview.superview isKindOfClass:[UITableViewCell class]]) {
+        return NO;
+    }
+    
+    return YES;
+}
+
 #pragma mark - UIViewControllerTransitionCoordinatorContext
 
 - (BOOL)initiallyInteractive {
